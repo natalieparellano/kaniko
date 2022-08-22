@@ -121,6 +121,17 @@ func newStageBuilder(args *dockerfile.BuildArgs, opts *config.KanikoOptions, sta
 	if err != nil {
 		return nil, err
 	}
+	var layerCache cache.LayerCache
+	switch {
+	case strings.HasPrefix(opts.CacheRepo, "oci:"):
+		layerCache = &cache.LayoutCache{
+			Opts: opts,
+		}
+	default:
+		layerCache = &cache.RegistryCache{
+			Opts: opts,
+		}
+	}
 	s := &stageBuilder{
 		stage:            stage,
 		image:            sourceImage,
@@ -132,9 +143,7 @@ func newStageBuilder(args *dockerfile.BuildArgs, opts *config.KanikoOptions, sta
 		crossStageDeps:   crossStageDeps,
 		digestToCacheKey: dcm,
 		stageIdxToDigest: sid,
-		layerCache: &cache.RegistryCache{
-			Opts: opts,
-		},
+		layerCache:       layerCache,
 		pushLayerToCache: pushLayerToCache,
 		fsUnpacked:       fsUnpacked,
 	}

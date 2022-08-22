@@ -332,5 +332,9 @@ func pushLayerToCache(opts *config.KanikoOptions, cacheKey string, tarPath strin
 	cacheOpts.Destinations = []string{cache}
 	cacheOpts.InsecureRegistries = opts.InsecureRegistries
 	cacheOpts.SkipTLSVerifyRegistries = opts.SkipTLSVerifyRegistries
+	if strings.HasPrefix(cache, "oci:") {
+		cacheOpts.OCILayoutPath = strings.TrimPrefix(cache, "oci:")
+		cacheOpts.NoPush = true
+	}
 	return DoPush(empty, &cacheOpts)
 }

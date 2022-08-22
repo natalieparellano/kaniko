@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/GoogleContainerTools/kaniko/pkg/config"
@@ -28,6 +29,7 @@ import (
 	"github.com/GoogleContainerTools/kaniko/pkg/util"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/pkg/errors"
@@ -83,6 +85,60 @@ func (rc *RegistryCache) RetrieveLayer(ck string) (v1.Image, error) {
 	if expiry.Before(time.Now()) {
 		logrus.Infof("Cache entry expired: %s", cache)
 		return nil, fmt.Errorf("Cache entry expired: %s", cache)
+	}
+
+	// Force the manifest to be populated
+	if _, err := img.RawManifest(); err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+type LayoutCache struct {
+	Opts *config.KanikoOptions
+}
+
+// RetrieveLayer retrieves a layer from the cache given the cache key ck.
+func (lc *LayoutCache) RetrieveLayer(ck string) (v1.Image, error) {
+	cache, err := Destination(lc.Opts, ck)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting cache destination")
+	}
+	logrus.Infof("Checking for cached layer %s...", cache)
+	cache = strings.TrimPrefix(cache, "oci:") // TODO: find the best place for this
+
+	// TODO: make helper
+	var img v1.Image
+	layoutPath, err := layout.FromPath(cache)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("constructing path from %s", cache))
+	}
+	index, err := layoutPath.ImageIndex()
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("retrieving index file for %s", layoutPath))
+	}
+	manifest, err := index.IndexManifest()
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("retrieving manifest file for %s", layoutPath))
+	}
+
+	for _, m := range manifest.Manifests {
+		img, err = layoutPath.Image(m.Digest)
+	}
+	if img == nil {
+		return nil, fmt.Errorf("failed to find cache image")
+	}
+
+	cf, err := img.ConfigFile()
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("retrieving config file for %s", cache))
+	}
+
+	expiry := cf.Created.Add(lc.Opts.CacheTTL)
+	// Layer is stale, rebuild it.
+	if expiry.Before(time.Now()) {
+		logrus.Infof("Cache entry expired: %s", cache)
+		return nil, fmt.Errorf("cache entry expired: %s", cache)
 	}
 
 	// Force the manifest to be populated
