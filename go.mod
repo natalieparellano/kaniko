@@ -5,6 +5,7 @@ go 1.17
 // These match the docker/docker's dependencies configured in:
 // https://github.com/moby/moby/blob/v20.10.12/vendor.conf
 replace (
+	github.com/docker/distribution => github.com/docker/distribution v2.8.1+incompatible
 	github.com/moby/buildkit => github.com/moby/buildkit v0.8.3
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc92
 	github.com/tonistiigi/fsutil => github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85
