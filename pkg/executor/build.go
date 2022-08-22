@@ -57,7 +57,12 @@ var (
 	initializeConfig = initConfig
 )
 
+var (
+	InitialFSUnpacked = false
+)
+
 type cachePusher func(*config.KanikoOptions, string, string, string) error
+
 type snapShotter interface {
 	Init() error
 	TakeSnapshotFS() (string, error)
@@ -81,10 +86,11 @@ type stageBuilder struct {
 	snapshotter      snapShotter
 	layerCache       cache.LayerCache
 	pushLayerToCache cachePusher
+	fsUnpacked       bool
 }
 
 // newStageBuilder returns a new type stageBuilder which contains all the information required to build the stage
-func newStageBuilder(args *dockerfile.BuildArgs, opts *config.KanikoOptions, stage config.KanikoStage, crossStageDeps map[int][]string, dcm map[string]string, sid map[string]string, stageNameToIdx map[string]string, fileContext util.FileContext) (*stageBuilder, error) {
+func newStageBuilder(args *dockerfile.BuildArgs, opts *config.KanikoOptions, stage config.KanikoStage, crossStageDeps map[int][]string, dcm map[string]string, sid map[string]string, stageNameToIdx map[string]string, fileContext util.FileContext, fsUnpacked bool) (*stageBuilder, error) {
 	sourceImage, err := image_util.RetrieveSourceImage(stage, opts)
 	if err != nil {
 		return nil, err
@@ -130,6 +136,7 @@ func newStageBuilder(args *dockerfile.BuildArgs, opts *config.KanikoOptions, sta
 			Opts: opts,
 		},
 		pushLayerToCache: pushLayerToCache,
+		fsUnpacked:       fsUnpacked,
 	}
 
 	for _, cmd := range s.stage.Commands {
@@ -322,6 +329,9 @@ func (s *stageBuilder) build() error {
 	if len(s.crossStageDeps[s.stage.Index]) > 0 {
 		shouldUnpack = true
 	}
+	if s.fsUnpacked {
+		shouldUnpack = false
+	}
 
 	if shouldUnpack {
 		t := timing.Start("FS Unpacking")
@@ -510,6 +520,7 @@ func (s *stageBuilder) saveSnapshotToLayer(tarPath string) (v1.Layer, error) {
 
 	return layer, nil
 }
+
 func (s *stageBuilder) saveLayerToImage(layer v1.Layer, createdBy string) error {
 	var err error
 	s.image, err = mutate.Append(s.image,
@@ -622,6 +633,10 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 	var args *dockerfile.BuildArgs
 
 	for index, stage := range kanikoStages {
+		fsUnpacked := false
+		if index == 0 {
+			fsUnpacked = InitialFSUnpacked
+		}
 
 		sb, err := newStageBuilder(
 			args, opts, stage,
@@ -629,7 +644,9 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 			digestToCacheKey,
 			stageIdxToDigest,
 			stageNameToIdx,
-			fileContext)
+			fileContext,
+			fsUnpacked,
+		)
 
 		logrus.Infof("Building stage '%v' [idx: '%v', base-idx: '%v']",
 			stage.BaseName, stage.Index, stage.BaseImageIndex)

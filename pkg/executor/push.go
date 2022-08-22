@@ -164,6 +164,7 @@ func DoPush(image v1.Image, opts *config.KanikoOptions) error {
 		}
 	}
 
+	// build up builder string
 	destRefs := []name.Tag{}
 	for _, destination := range opts.Destinations {
 		destRef, err := name.NewTag(destination, name.WeakValidation)
@@ -289,8 +290,8 @@ func writeImageOutputs(image v1.Image, destRefs []name.Tag) error {
 	return nil
 }
 
-// pushLayerToCache pushes layer (tagged with cacheKey) to opts.Cache
-// if opts.Cache doesn't exist, infer the cache from the given destination
+// pushLayerToCache pushes layer (tagged with cacheKey) to opts.CacheRepo
+// if opts.CacheRepo doesn't exist, infer the cache from the given destination
 func pushLayerToCache(opts *config.KanikoOptions, cacheKey string, tarPath string, createdBy string) error {
 	var layer v1.Layer
 	var err error
