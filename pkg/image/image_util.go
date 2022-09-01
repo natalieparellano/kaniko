@@ -106,7 +106,9 @@ func cachedImage(opts *config.KanikoOptions, image string) (v1.Image, error) {
 	var cacheKey string
 	if d, ok := ref.(name.Digest); ok {
 		cacheKey = d.DigestStr()
+		logrus.Infof("Found cache key: %s", cacheKey)
 	} else {
+		logrus.Info("Did not find cache key, pulling remote image...")
 		image, err := remote.RetrieveRemoteImage(image, opts.RegistryOptions, opts.CustomPlatform)
 		if err != nil {
 			return nil, err
